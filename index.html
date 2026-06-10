@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>World Cup 2026 Tracker • Leaderboard & Live</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,14 +21,14 @@ html{font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif}
 @keyframes shimmer{100%{transform:translateX(100%)}}
 .pulse-live{animation:pulse 1.8s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-.modal-enter{animation:modalIn .25s ease-out}
+.modal-enter{animation:modalIn.25s ease-out}
 @keyframes modalIn{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
 .link-btn{cursor:pointer;min-height:44px;min-width:44px}
 .link-btn:focus-visible{outline:2px solid #a855f7;outline-offset:2px;border-radius:8px}
 .tap-target{min-height:44px;min-width:44px}
 .tooltip{position:relative;display:inline-flex;align-items:center}
 .tooltip-bubble{position:absolute;left:50%;bottom:100%;transform:translateX(-50%) translateY(-8px);white-space:nowrap;background:#0f172a;color:#e2e8f0;border:1px solid rgba(255,255,255,.1);padding:6px 10px;border-radius:8px;font-size:12px;opacity:0;pointer-events:none;transition:.15s;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.4)}
-.tooltip:hover .tooltip-bubble,.tooltip:focus-within .tooltip-bubble{opacity:1}
+.tooltip:hover.tooltip-bubble,.tooltip:focus-within.tooltip-bubble{opacity:1}
 body{font-size:16px;line-height:1.6}
 .secondary{font-size:14px}
 .safe-bottom{padding-bottom:env(safe-area-inset-bottom)}
@@ -50,12 +51,11 @@ body{font-size:16px;line-height:1.6}
         <h1 class="display text-2xl sm:text-3xl font-bold tracking-tight">World Cup 2026 Tracker</h1>
         <p class="text-sm text-slate-400 -mt-0.5">Leaderboard • Teams • Fixtures • Standings • News</p>
       </div>
-    </div>
     <div class="flex items-center gap-2">
-      <button id="shareBtn" class="tap-target group inline-flex items-center gap-2 rounded-full bg-white/10 hover:bg-white/15 border border-white/10 px-5 py-3 text-base font-medium transition">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
-        Share
-      </button>
+      <div id="leaderPill" class="hidden sm:flex items-center gap-2 rounded-full bg-fuchsia-500/10 border border-fuchsia-500/20 px-3 py-1.5 text-sm text-fuchsia-200">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9H4.5a2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 0 0 0 0-5H18"/><path d="M4 22v-7h16v7"/><path d="M10 22v-6h4v6"/><path d="M12 9v4"/></svg>
+        <span id="leaderText">Loading...</span>
+      </div>
       <div class="hidden sm:flex items-center gap-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 text-sm text-emerald-300">
         <span class="w-2 h-2 rounded-full bg-emerald-400 pulse-live"></span>
         <span id="lastUpdated">Live</span>
@@ -107,6 +107,8 @@ body{font-size:16px;line-height:1.6}
         </div>
       </div>
 
+      <div id="liveRace" class="mb-6"></div>
+
       <div class="grid lg:grid-cols-2 gap-6">
         <!-- By Player -->
         <div class="glass rounded-2xl border border-white/10 overflow-hidden">
@@ -144,6 +146,7 @@ body{font-size:16px;line-height:1.6}
         <h2 class="display text-xl sm:text-2xl font-bold">Match Centre</h2>
         <div class="text-sm text-slate-400 secondary">Auto refreshes every 60s</div>
       </div>
+      <div id="fixturesOwners" class="mb-6"></div>
       <div id="fixturesList" class="space-y-6"></div>
     </section>
 
@@ -169,7 +172,7 @@ body{font-size:16px;line-height:1.6}
 <nav class="sm:hidden fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-[#020617]/90 backdrop-blur-xl safe-bottom">
   <div class="grid grid-cols-5">
     <button data-tab="leaderboard" class="mobile-tab active flex flex-col items-center justify-center py-3 gap-1 text-xs font-medium text-white">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0.55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0.55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
       Board
     </button>
     <button data-tab="teams" class="mobile-tab flex flex-col items-center justify-center py-3 gap-1 text-xs font-medium text-slate-400">
@@ -312,7 +315,7 @@ function setActiveTab(id){
     const active = b.dataset.tab===id;
     b.classList.toggle('active', active);
     b.classList.toggle('text-white', active);
-    b.classList.toggle('text-slate-400', !active);
+    b.classList.toggle('text-slate-400',!active);
   });
   $$('.tab-panel').forEach(p=>p.classList.toggle('hidden', p.id!==`tab-${id}`));
   history.replaceState(null,'',`#${id}`);
@@ -323,18 +326,8 @@ function setActiveTab(id){
   if(id==='news') loadNews();
 }
 
-$$('.tab-btn, .mobile-tab').forEach(btn=>{
+$$('.tab-btn,.mobile-tab').forEach(btn=>{
   btn.addEventListener('click',()=>setActiveTab(btn.dataset.tab));
-});
-
-$('#shareBtn').addEventListener('click', async ()=>{
-  const url = location.href;
-  try{
-    await navigator.clipboard.writeText(url);
-    toast('Link copied!');
-  }catch{
-    prompt('Copy link:', url);
-  }
 });
 
 function toast(msg){
@@ -375,9 +368,60 @@ async function loadFixtures(){
 
 function renderFixtures(){
   const container = $('#fixturesList');
+  const ownersEl = $('#fixturesOwners');
   if(!state.fixtures.length){
     container.innerHTML = `<div class="glass rounded-2xl border border-white/10 p-6 text-slate-400">No fixtures found yet.</div>`;
+    if(ownersEl) ownersEl.innerHTML = '';
     return;
+  }
+  // Build owners today/next section
+  if(ownersEl){
+    const todayKey = new Date().toLocaleDateString('en-CA');
+    const byDate = new Map();
+    state.fixtures.forEach(ev=>{
+      const key = new Date(ev.date).toLocaleDateString('en-CA');
+      if(!byDate.has(key)) byDate.set(key, []);
+      byDate.get(key).push(ev);
+    });
+    const sortedDates = Array.from(byDate.keys()).sort();
+    const todayEvents = byDate.get(todayKey) || [];
+    let nextDate = null;
+    for(const d of sortedDates){
+      if(d > todayKey){ nextDate = d; break; }
+    }
+    const nextEvents = nextDate? byDate.get(nextDate) : [];
+    const renderOwnersList = (events) => {
+      if(!events.length) return '<div class="text-sm text-slate-500">No matches</div>';
+      return events.map(ev=>{
+        const comp = ev.competitions[0];
+        const home = comp.competitors.find(c=>c.homeAway==='home');
+        const away = comp.competitors.find(c=>c.homeAway==='away');
+        const homeName = home.team.shortDisplayName || home.team.displayName;
+        const awayName = away.team.shortDisplayName || away.team.displayName;
+        const homeOwner = ownerByNormalized.get(getCanonicalNorm(home.team.displayName)) || '-';
+        const awayOwner = ownerByNormalized.get(getCanonicalNorm(away.team.displayName)) || '-';
+        const time = new Date(ev.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+        return `<div class="flex items-center justify-between py-2 border-b border-white/5 last:border-b-0">
+          <div class="min-w-0">
+            <div class="font-medium truncate">${homeName} <span class="text-slate-500">vs</span> ${awayName}</div>
+            <div class="text-xs text-slate-500">${time} • ${homeOwner} vs ${awayOwner}</div>
+          </div>
+          <div class="text-xs px-2 py-1 rounded-full bg-white/10">${comp.status.type.shortDetail || 'Scheduled'}</div>
+        </div>`;
+      }).join('');
+    };
+    ownersEl.innerHTML = `
+      <div class="grid md:grid-cols-2 gap-4">
+        <div class="glass rounded-2xl border border-white/10 p-4">
+          <h3 class="font-bold mb-2 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-400"></span>Today's teams</h3>
+          <div class="divide-y divide-white/5">${renderOwnersList(todayEvents)}</div>
+        </div>
+        <div class="glass rounded-2xl border border-white/10 p-4">
+          <h3 class="font-bold mb-2 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-cyan-400"></span>Next up${nextDate? ' • '+new Date(nextDate).toLocaleDateString(undefined,{month:'short',day:'numeric'}) : ''}</h3>
+          <div class="divide-y divide-white/5">${renderOwnersList(nextEvents)}</div>
+        </div>
+      </div>
+    `;
   }
   const byDate = new Map();
   state.fixtures.forEach(ev=>{
@@ -397,12 +441,12 @@ function renderFixtures(){
       const status = comp.status.type;
       const isLive = status.state==='in';
       const isFinal = status.state==='post';
-      const homeScore = home.score ?? '0';
-      const awayScore = away.score ?? '0';
+      const homeScore = home.score?? '0';
+      const awayScore = away.score?? '0';
       const homeTeam = home.team.shortDisplayName || home.team.displayName;
       const awayTeam = away.team.shortDisplayName || away.team.displayName;
-      const homeFlag = home.team.logo ? `<img src="${home.team.logo}" class="w-8 h-8 rounded-full bg-white/10 object-contain" alt="">` : `<div class="w-8 h-8 rounded-full bg-white/10"></div>`;
-      const awayFlag = away.team.logo ? `<img src="${away.team.logo}" class="w-8 h-8 rounded-full bg-white/10 object-contain" alt="">` : `<div class="w-8 h-8 rounded-full bg-white/10"></div>`;
+      const homeFlag = home.team.logo? `<img src="${home.team.logo}" class="w-8 h-8 rounded-full bg-white/10 object-contain" alt="">` : `<div class="w-8 h-8 rounded-full bg-white/10"></div>`;
+      const awayFlag = away.team.logo? `<img src="${away.team.logo}" class="w-8 h-8 rounded-full bg-white/10 object-contain" alt="">` : `<div class="w-8 h-8 rounded-full bg-white/10"></div>`;
       return `
         <div class="glass rounded-2xl border border-white/10 p-4 sm:p-5 hover:border-white/20 transition">
           <div class="flex items-center gap-3">
@@ -418,7 +462,6 @@ function renderFixtures(){
               <div class="text-xs mt-1 ${isLive?'text-emerald-400':isFinal?'text-slate-400':'text-amber-400'} font-medium uppercase tracking-wide">
                 ${isLive?'LIVE • '+status.shortDetail : status.shortDetail || status.description || 'SCHEDULED'}
               </div>
-            </div>
             <div class="flex items-center gap-3 flex-1 min-w-0 justify-end text-right">
               <div class="min-w-0">
                 <div class="font-semibold truncate">${awayTeam}</div>
@@ -469,14 +512,14 @@ function renderStandings(){
       return {
         team: team.displayName,
         logo: team.logos?.[0]?.href,
-        pld: stats.gamesPlayed ?? 0,
-        w: stats.wins ?? 0,
-        d: stats.ties ?? 0,
-        l: stats.losses ?? 0,
-        gf: stats.pointsFor ?? 0,
-        ga: stats.pointsAgainst ?? 0,
+        pld: stats.gamesPlayed?? 0,
+        w: stats.wins?? 0,
+        d: stats.ties?? 0,
+        l: stats.losses?? 0,
+        gf: stats.pointsFor?? 0,
+        ga: stats.pointsAgainst?? 0,
         gd: (stats.pointsFor??0)-(stats.pointsAgainst??0),
-        pts: stats.points ?? 0
+        pts: stats.points?? 0
       };
     });
     return `
@@ -633,10 +676,10 @@ function computeFantasy(){
     const teamName = [...teamToOwner.keys()].find(k=>k===norm);
     const displayName = PLAYERS.flatMap(p=>p.teams).find(t=>getCanonicalNorm(t)===norm) || norm;
     const owner = teamToOwner.get(norm)||'-';
-    teamRows.push({team:displayName, owner, ...s});
+    teamRows.push({team:displayName, owner,...s});
   });
   teamRows.sort((a,b)=>b.total-a.total);
-  state.fantasy = {playerRows, teamRows, teamStats};
+  state.fantasy = {playerRows, teamStats};
 }
 
 function renderLeaderboard(){
@@ -648,6 +691,21 @@ function renderLeaderboard(){
     return;
   }
   const {playerRows, teamRows} = state.fantasy;
+  // Update leader pill
+  const leaderTextEl = $('#leaderText');
+  if(leaderTextEl){
+    if(!playerRows.length || playerRows.every(r=>r.total===0)){
+      leaderTextEl.textContent = 'No leader yet';
+    } else {
+      const topScore = playerRows[0].total;
+      const leaders = playerRows.filter(r=>r.total===topScore);
+      if(leaders.length===1){
+        leaderTextEl.textContent = `Leader: ${leaders[0].player} • ${topScore} pts`;
+      } else {
+        leaderTextEl.textContent = `Joint leaders: ${leaders.map(l=>l.player).join(', ')} • ${topScore} pts`;
+      }
+    }
+  }
   byPlayer.innerHTML = `
     <div class="hidden sm:block">
       <table class="w-full text-sm">
@@ -656,9 +714,9 @@ function renderLeaderboard(){
             <th class="text-left px-5 py-2 font-semibold">#</th>
             <th class="text-left px-5 py-2 font-semibold">Player</th>
             <th class="text-left px-5 py-2 font-semibold">Teams</th>
-            <th class="text-center px-2 py-2 font-semibold">Res</th>
-            <th class="text-center px-2 py-2 font-semibold">Gls</th>
-            <th class="text-center px-2 py-2 font-semibold">CS</th>
+            <th class="text-center px-2 py-2 font-semibold">Result</th>
+            <th class="text-center px-2 py-2 font-semibold">Goals</th>
+            <th class="text-center px-2 py-2 font-semibold">Clean</th>
             <th class="text-center px-5 py-2 font-semibold">Total</th>
           </tr>
         </thead>
@@ -694,24 +752,24 @@ function renderLeaderboard(){
             ${r.teams.map(t=>`<button data-team="${t}" class="link-btn px-2 py-0.5 rounded-full bg-white/10 text-xs">${t}</button>`).join('')}
           </div>
           <div class="grid grid-cols-3 gap-2 mt-3 text-center text-sm">
-            <div class="bg-white/5 rounded-lg py-1.5"><div class="text-slate-500 text-xs">Res</div><div class="font-bold tabular-nums">${r.resultPts}</div></div>
-            <div class="bg-white/5 rounded-lg py-1.5"><div class="text-slate-500 text-xs">Gls</div><div class="font-bold tabular-nums">${r.goalsPts}</div></div>
-            <div class="bg-white/5 rounded-lg py-1.5"><div class="text-slate-500 text-xs">CS</div><div class="font-bold tabular-nums">${r.csPts}</div></div>
+            <div class="bg-white/5 rounded-lg py-1.5"><div class="text-slate-500 text-xs">Result</div><div class="font-bold tabular-nums">${r.resultPts}</div></div>
+            <div class="bg-white/5 rounded-lg py-1.5"><div class="text-slate-500 text-xs">Goals</div><div class="font-bold tabular-nums">${r.goalsPts}</div></div>
+            <div class="bg-white/5 rounded-lg py-1.5"><div class="text-slate-500 text-xs">Clean</div><div class="font-bold tabular-nums">${r.csPts}</div></div>
           </div>
         </div>
       `).join('')}
     </div>
   `;
-  byTeam.innerHTML = `
+  byTeam.innerHTML = teamRows.length? `
     <div class="hidden sm:block max-h-[520px] overflow-y-auto scrollbar-thin">
       <table class="w-full text-sm">
         <thead class="text-xs uppercase tracking-wide text-slate-500 sticky top-0 bg-[#0b1220]/80 backdrop-blur">
           <tr class="border-b border-white/5">
             <th class="text-left px-5 py-2 font-semibold">Team</th>
             <th class="text-left px-5 py-2 font-semibold">Owner</th>
-            <th class="text-center px-2 py-2 font-semibold">Res</th>
-            <th class="text-center px-2 py-2 font-semibold">Gls</th>
-            <th class="text-center px-2 py-2 font-semibold">CS</th>
+            <th class="text-center px-2 py-2 font-semibold">Result</th>
+            <th class="text-center px-2 py-2 font-semibold">Goals</th>
+            <th class="text-center px-2 py-2 font-semibold">Clean</th>
             <th class="text-center px-5 py-2 font-semibold">Total</th>
           </tr>
         </thead>
@@ -738,14 +796,55 @@ function renderLeaderboard(){
           </div>
           <div class="text-sm text-slate-400 secondary">Owner: <button data-player="${r.owner}" class="link-btn underline decoration-dotted">${r.owner}</button></div>
           <div class="grid grid-cols-3 gap-2 mt-2 text-center text-xs">
-            <div class="bg-white/5 rounded py-1">Res ${r.resultPts}</div>
-            <div class="bg-white/5 rounded py-1">Gls ${r.goalsPts}</div>
-            <div class="bg-white/5 rounded py-1">CS ${r.csPts}</div>
+            <div class="bg-white/5 rounded py-1">Result ${r.resultPts}</div>
+            <div class="bg-white/5 rounded py-1">Goals ${r.goalsPts}</div>
+            <div class="bg-white/5 rounded py-1">Clean ${r.csPts}</div>
           </div>
         </div>
       `).join('')}
     </div>
-  `;
+  ` : `<div class="p-8 text-center text-slate-400">
+    <div class="text-lg font-medium mb-1">No team data yet</div>
+    <div class="text-sm">Tournament hasn't started. Points will appear after the first match finishes.</div>
+  </div>`;
+  // Live Race
+  const liveRaceEl = $('#liveRace');
+  if(liveRaceEl){
+    const liveMatches = state.fixtures.filter(ev=>{
+      const st = ev.competitions?.[0]?.status?.type;
+      return st && st.state === 'in';
+    });
+    if(liveMatches.length){
+      const top3 = playerRows.slice(0,3);
+      liveRaceEl.innerHTML = `
+        <div class="glass rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-bold text-lg flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-400 pulse-live"></span>Live Race</h3>
+            <span class="text-xs text-emerald-300">${liveMatches.length} match${liveMatches.length>1?'es':''} in play</span>
+          </div>
+          <div class="grid sm:grid-cols-3 gap-3">
+            ${top3.map((r,i)=>`
+              <div class="bg-white/5 rounded-xl p-3 border border-white/10">
+                <div class="text-sm text-slate-400">#${i+1} ${r.player}</div>
+                <div class="text-2xl font-bold tabular-nums">${r.total}</div>
+                <div class="text-xs text-slate-500">Result ${r.resultPts} • Goals ${r.goalsPts} • Clean ${r.csPts}</div>
+              </div>
+            `).join('')}
+          </div>
+          <div class="mt-3 text-sm text-slate-300">
+            ${liveMatches.map(ev=>{
+              const comp = ev.competitions[0];
+              const home = comp.competitors.find(c=>c.homeAway==='home');
+              const away = comp.competitors.find(c=>c.homeAway==='away');
+              return `<div class="py-1 border-t border-white/5 first:border-t-0">${home.team.shortDisplayName||home.team.displayName} ${home.score??0} - ${away.score??0} ${away.team.shortDisplayName||away.team.displayName} <span class="text-emerald-400 ml-2">${comp.status.type.shortDetail}</span></div>`;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    } else {
+      liveRaceEl.innerHTML = '';
+    }
+  }
 }
 
 function openPlayerModal(name){
@@ -801,8 +900,8 @@ async function renderPlayerModalContent(name){
     const fixtures = getTeamFixtures(team);
     const el = document.getElementById(`mini-${team.replace(/\s+/g,'-')}`);
     if(el){
-      const list = [...fixtures.past.slice(-3), ...fixtures.future.slice(0,2)];
-      el.innerHTML = list.length ? `<div class="text-xs uppercase tracking-wide text-slate-500 font-semibold mb-1 secondary">Recent & Next</div><div class="space-y-1.5">${list.map(ev=>renderMiniFixture(ev, team)).join('')}</div>` : `<div class="text-sm text-slate-500 secondary">No fixtures yet</div>`;
+      const list = [...fixtures.past.slice(-3),...fixtures.future.slice(0,2)];
+      el.innerHTML = list.length? `<div class="text-xs uppercase tracking-wide text-slate-500 font-semibold mb-1 secondary">Recent & Next</div><div class="space-y-1.5">${list.map(ev=>renderMiniFixture(ev, team)).join('')}</div>` : `<div class="text-sm text-slate-500 secondary">No fixtures yet</div>`;
     }
   });
 }
@@ -823,11 +922,11 @@ function getTeamFixtures(teamCanonical){
   const now = Date.now();
   const past = matches.filter(ev=>{
     const status = ev.competitions[0].status.type;
-    return status.state === 'post' || new Date(ev.date).getTime() < now && status.state !== 'pre';
+    return status.state === 'post' || new Date(ev.date).getTime() < now && status.state!== 'pre';
   });
   const future = matches.filter(ev=>{
     const status = ev.competitions[0].status.type;
-    return status.state === 'pre' || new Date(ev.date).getTime() >= now && status.state !== 'post';
+    return status.state === 'pre' || new Date(ev.date).getTime() >= now && status.state!== 'post';
   });
   return {all:matches, past, future};
 }
@@ -849,7 +948,7 @@ function renderMiniFixture(ev, focusTeam){
         <div class="truncate text-slate-400 ${!focusIsHome?'text-cyan-300':''}">${awayName}</div>
       </div>
       <div class="text-right ml-3 shrink-0">
-        <div class="font-bold tabular-nums">${home.score ?? '-'} : ${away.score ?? '-'}</div>
+        <div class="font-bold tabular-nums">${home.score?? '-'} : ${away.score?? '-'}</div>
         <div class="text-xs ${isLive?'text-emerald-300':'text-slate-500'}">${isLive?'LIVE':dateStr}</div>
       </div>
     </div>
@@ -900,7 +999,7 @@ async function renderTeamModalContent(team){
               <div class="text-sm text-slate-500 secondary">${dateStr} • ${status.shortDetail||status.description||''}</div>
             </div>
             <div class="ml-4 text-right shrink-0">
-              <div class="font-bold tabular-nums text-lg">${home.score ?? '-'} : ${away.score ?? '-'}</div>
+              <div class="font-bold tabular-nums text-lg">${home.score?? '-'} : ${away.score?? '-'}</div>
             </div>
           </div>
         `;
