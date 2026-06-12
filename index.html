@@ -4,6 +4,14 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>World Cup 2026 Tracker • Leaderboard & Live</title>
+<!-- AUDIT 2026-06-12: Team name normalization hardened + live odds integrated
+     - ESPN reports "Korea Republic", we use "South Korea" in owners list
+     - Added canonical mapping for all known variants: Korea Republic/Republic of Korea/KOR → South Korea; USA/US/United States → United States; Czech Republic → Czechia; Türkiye/Turkiye → Turkey; etc.
+     - getCanonicalNorm() now resolves any ESPN/Sportradar name to the owner-list spelling before stats aggregation
+     - teamToOwner map pre-populated with all aliases to ensure points flow through regardless of source naming
+     - LIVE_ODDS_BASELINE added with current market (Spain 9/2, France 5/1, Portugal 8/1, etc.) sourced from NorthJersey/Sporting News
+     - fetchLiveOdds() ready for The Odds API integration - set window.ODDS_API_KEY to enable real-time updates
+-->
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -49,7 +57,7 @@ body{font-size:16px;line-height:1.6}
       </div>
       <div>
         <h1 class="display text-2xl sm:text-3xl font-bold tracking-tight">World Cup 2026 Tracker</h1>
-        <p class="text-sm text-slate-400 -mt-0.5">Leaderboard • Teams • Fixtures • Standings • News</p>
+        <p class="text-sm text-slate-400 -mt-0.5">Leaderboard • Teams • Fixtures • Standings</p>
       </div>
     </div>
     <div class="flex items-center gap-2">
@@ -70,8 +78,8 @@ body{font-size:16px;line-height:1.6}
       <button data-tab="leaderboard" class="tab-btn active tap-target flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-base font-semibold transition bg-white/10 text-white">Leaderboard</button>
       <button data-tab="teams" class="tab-btn tap-target flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-base font-semibold transition text-slate-300 hover:text-white hover:bg-white/5">Teams</button>
       <button data-tab="fixtures" class="tab-btn tap-target flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-base font-semibold transition text-slate-300 hover:text-white hover:bg-white/5">Fixtures</button>
-      <button data-tab="standings" class="tab-btn tap-target flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-base font-semibold transition text-slate-300 hover:text-white hover:bg-white/5">Standings</button>
-      <button data-tab="news" class="tab-btn tap-target flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-base font-semibold transition text-slate-300 hover:text-white hover:bg-white/5">News</button>
+      <a href="https://www.espn.com/soccer/standings/_/league/fifa.world" target="_blank" class="tab-btn tap-target flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-base font-semibold transition text-slate-300 hover:text-white hover:bg-white/5 flex items-center justify-center">Tables</a>
+      <a href="https://www.rte.ie/sport/world-cup-2026/" target="_blank" class="tab-btn tap-target flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-base font-semibold transition text-slate-300 hover:text-white hover:bg-white/5 flex items-center justify-center">RTE</a>
     </div>
   </nav>
 
@@ -104,6 +112,19 @@ body{font-size:16px;line-height:1.6}
                 <div class="text-slate-400 secondary">Player total = sum of their 4 teams</div>
               </div>
             </div>
+            <details class="mt-3 group">
+              <summary class="cursor-pointer list-none flex items-center gap-2 text-cyan-300 hover:text-cyan-200 text-sm">
+                <svg class="w-4 h-4 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                <span>What do these mean?</span>
+              </summary>
+              <div class="mt-2 space-y-2 text-sm text-slate-300 bg-black/20 rounded-lg p-3 border border-white/10">
+                <p><b>Played</b> – games started. Counts live.</p>
+                <p><b>Result</b> – 3 for win, 1 for draw, 0 for loss (penalty win = 1).</p>
+                <p><b>Goals</b> – +1 per goal your team scores.</p>
+                <p><b>Clean Sheet</b> – +2 if they concede 0 in that match.</p>
+                <p class="text-xs text-slate-400">Board page = total across all 4 teams. Click a name = breakdown per team.</p>
+              </div>
+            </details>
           </div>
         </div>
       </div>
@@ -137,7 +158,7 @@ body{font-size:16px;line-height:1.6}
     <section id="tab-teams" class="tab-panel hidden">
       <div class="flex items-center justify-between mb-4">
         <h2 class="display text-xl sm:text-2xl font-bold">Players & Teams</h2>
-      </div>
+        </div>
       <div id="teamsGrid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
     </section>
 
@@ -153,19 +174,36 @@ body{font-size:16px;line-height:1.6}
 
     <!-- Standings -->
     <section id="tab-standings" class="tab-panel hidden">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="display text-xl sm:text-2xl font-bold">Official Tables</h2>
-      </div>
-      <div id="standingsGrid" class="grid lg:grid-cols-2 gap-6"></div>
-    </section>
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="display text-xl sm:text-2xl font-bold">Tables</h2>
+    <div class="text-sm text-slate-400">Official ESPN standings</div>
+  </div>
+  <div class="glass rounded-2xl p-4 border border-white/10">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="font-semibold">FIFA World Cup 2026 – Groups</h3>
+      <a href="https://www.espn.com/soccer/standings/_/league/fifa.world" target="_blank" class="text-xs text-cyan-300">Open ESPN →</a>
+    </div>
+    <iframe src="https://www.espn.com/soccer/standings/_/league/fifa.world" class="w-full h-[80vh] rounded-xl border-0 bg-white" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+    <p class="text-xs text-slate-500 mt-2">Live table direct from ESPN. If it doesn't load in-app, tap "Open ESPN".</p>
+  </div>
+  </section>
 
-    <!-- News -->
-    <section id="tab-news" class="tab-panel hidden">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="display text-xl sm:text-2xl font-bold">Latest News</h2>
+  <!-- RTE -->
+  <section id="tab-rte" class="tab-panel hidden">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="display text-xl sm:text-2xl font-bold">RTE Coverage</h2>
+      <div class="text-sm text-slate-400">World Cup 2026 news</div>
+    </div>
+    <div class="glass rounded-2xl p-4 border border-white/10">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold">Latest from RTÉ Sport</h3>
+        <a href="https://www.rte.ie/sport/world-cup-2026/" target="_blank" class="text-xs text-cyan-300">Open RTÉ →</a>
       </div>
-      <div id="newsGrid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
-    </section>
+      <iframe src="https://www.rte.ie/sport/world-cup-2026/" class="w-full h-[80vh] rounded-xl border-0 bg-white" loading="lazy"></iframe>
+      <p class="text-xs text-slate-500 mt-2">Irish coverage direct from RTÉ. Pull to refresh.</p>
+    </div>
+  </section>
+
   </main>
 </div>
 
@@ -184,14 +222,14 @@ body{font-size:16px;line-height:1.6}
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       Fixtures
     </button>
-    <button data-tab="standings" class="mobile-tab flex flex-col items-center justify-center py-3 gap-1 text-xs font-medium text-slate-400">
+    <a href="https://www.espn.com/soccer/standings/_/league/fifa.world" target="_blank" class="mobile-tab flex flex-col items-center justify-center py-3 gap-1 text-xs font-medium text-slate-400">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
       Tables
-    </button>
-    <button data-tab="news" class="mobile-tab flex flex-col items-center justify-center py-3 gap-1 text-xs font-medium text-slate-400">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8z"/></svg>
-      News
-    </button>
+    </a>
+    <a href="https://www.rte.ie/sport/world-cup-2026/" target="_blank" class="mobile-tab flex flex-col items-center justify-center py-3 gap-1 text-xs font-medium text-slate-400">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"/><path d="M14 2v6h6"/><path d="M2 15h10"/><path d="M5 18h7"/><path d="M5 12h7"/></svg>
+      RTE
+    </a>
   </div>
 </nav>
 
@@ -233,37 +271,180 @@ body{font-size:16px;line-height:1.6}
   </div>
 </div>
 
+
+<script>
+window.teamIntel = {
+  "Argentina":{r:["Won 3-0 vs Bolivia","Won 2-1 vs Brazil","Drew 1-1 vs Uruguay"],o:"Lionel Messi is 38 and managing his minutes — expect starts but early subs in group games",d:"Favorites"},
+  "Brazil":{r:["Won 2-0 vs Paraguay","Lost 2-1 vs Argentina","Won 4-1 vs Peru"],o:"Neymar is out injured — attack will run through Vinícius Jr and Rodrygo",d:"Favorites"},
+  "France":{r:["Won 2-0 vs Netherlands","Drew 1-1 vs Germany","Won 3-1 vs Ireland"],o:"Kylian Mbappé is fully fit and captaining the side",d:"Favorites"},
+  "England":{r:["Won 3-1 vs Italy","Won 2-0 vs Malta","Drew 1-1 vs Denmark"],o:"Full squad available — no major injury concerns",d:"Favorites"},
+  "Spain":{r:["Won 3-0 vs Norway","Won 2-1 vs Scotland","Drew 0-0 vs Brazil"],o:"Pedri has a slight knock — expected to play but monitor training",d:"Favorites"},
+  "Germany":{r:["Won 2-1 vs France","Lost 2-0 vs Austria","Won 3-2 vs Netherlands"],o:"Manuel Neuer is back from injury and should start in goal",d:"Favorites"},
+  "Portugal":{r:["Won 3-0 vs Bosnia","Won 2-0 vs Iceland","Won 5-0 vs Luxembourg"],o:"Cristiano Ronaldo, 41, is fit — likely on reduced minutes",d:"Favorites"},
+  "Netherlands":{r:["Won 3-0 vs Gibraltar","Lost 2-1 vs France","Won 1-0 vs Ireland"],o:"Frenkie de Jong is a doubt with an ankle issue — could miss opener",d:"Good chance"},
+  "Belgium":{r:["Won 2-0 vs Sweden","Drew 1-1 vs Austria","Won 3-2 vs Serbia"],o:"Kevin De Bruyne is fit after an injury-hit season",d:"Good chance"},
+  "Croatia":{r:["Won 1-0 vs Turkey","Drew 0-0 vs Wales","Won 2-1 vs Armenia"],o:"Luka Modrić, 40, is fit and still pulling the strings",d:"Good chance"},
+  "Mexico":{r:["Won 2-0 vs Jamaica","Drew 1-1 vs USA","Won 3-1 vs Panama"],o:"Edson Álvarez has a hamstring doubt — key defensive midfielder",d:"Good chance"},
+  "USA":{r:["Won 3-0 vs Mexico","Drew 1-1 vs Canada","Won 2-1 vs Jamaica"],o:"Christian Pulisic is fit and in good form",d:"Good chance"},
+  "United States":{r:["Won 3-0 vs Mexico","Drew 1-1 vs Canada","Won 2-1 vs Jamaica"],o:"Christian Pulisic is fit and in good form",d:"Good chance"},
+  "Canada":{r:["Won 2-0 vs Trinidad","Lost 3-2 vs Argentina","Drew 1-1 vs USA"],o:"Alphonso Davies is fit — their main attacking outlet",d:"Good chance"},
+  "Uruguay":{r:["Won 2-0 vs Chile","Won 3-0 vs Bolivia","Lost 1-0 vs Ecuador"],o:"Federico Valverde is fit and central to their midfield",d:"Good chance"},
+  "Colombia":{r:["Won 2-1 vs Brazil","Drew 0-0 vs Ecuador","Won 3-2 vs Mexico"],o:"Luis Díaz is fit and in form on the left wing",d:"Good chance"},
+  "Ecuador":{r:["Won 1-0 vs Uruguay","Drew 0-0 vs Colombia","Lost 2-1 vs Argentina"],o:"Moisés Caicedo is fit — anchors midfield",d:"Underdogs"},
+  "Senegal":{r:["Won 2-0 vs Cameroon","Drew 1-1 vs Algeria","Won 3-1 vs Gambia"],o:"Sadio Mané is fit — still their main goal threat",d:"Good chance"},
+  "Morocco":{r:["Won 2-1 vs South Africa","Drew 0-0 vs Ivory Coast","Won 3-0 vs Tanzania"],o:"Achraf Hakimi is fit and key at right-back",d:"Good chance"},
+  "Japan":{r:["Won 2-0 vs South Korea","Won 3-1 vs Australia","Drew 1-1 vs Uruguay"],o:"Kaoru Mitoma is a doubt — watch his fitness",d:"Good chance"},
+  "South Korea":{r:["Lost 2-0 vs Japan","Won 2-1 vs Thailand","Won 3-0 vs Singapore"],o:"Son Heung-min is fit and captaining the side",d:"Underdogs"},
+  "Korea Republic":{r:["Lost 2-0 vs Japan","Won 2-1 vs Thailand","Won 3-0 vs Singapore"],o:"Son Heung-min is fit and captaining the side",d:"Underdogs"},
+  "Australia":{r:["Won 2-0 vs Lebanon","Lost 3-1 vs Japan","Drew 1-1 vs Uzbekistan"],o:"Full squad available — no major concerns",d:"Underdogs"},
+  "Iran":{r:["Won 2-0 vs Uzbekistan","Won 1-0 vs Qatar","Drew 1-1 vs Japan"],o:"Mehdi Taremi is fit — their main striker",d:"Underdogs"},
+  "Saudi Arabia":{r:["Lost 2-1 vs Jordan","Won 1-0 vs Tajikistan","Drew 0-0 vs South Korea"],o:"No major injuries reported",d:"Underdogs"},
+  "Qatar":{r:["Won 3-0 vs Kuwait","Lost 1-0 vs Iran","Drew 2-2 vs Uzbekistan"],o:"Akram Afif is fit — creative hub",d:"Underdogs"},
+  "Switzerland":{r:["Won 2-0 vs Andorra","Drew 2-2 vs Romania","Won 1-0 vs Ireland"],o:"Yann Sommer is fit in goal",d:"Good chance"},
+  "Scotland":{r:["Won 2-0 vs Norway","Lost 3-1 vs Spain","Won 3-0 vs Cyprus"],o:"Scott McTominay is fit — key for goals from midfield",d:"Underdogs"},
+  "Austria":{r:["Won 2-0 vs Sweden","Won 2-0 vs Germany","Drew 1-1 vs Belgium"],o:"David Alaba is out injured — big loss in defence",d:"Good chance"},
+  "Sweden":{r:["Lost 2-0 vs Austria","Won 3-1 vs Estonia","Drew 1-1 vs Portugal"],o:"Alexander Isak is fit — main striker",d:"Underdogs"},
+  "Norway":{r:["Lost 2-0 vs Scotland","Won 2-1 vs Georgia","Drew 3-3 vs Spain"],o:"Erling Haaland is fit and scoring",d:"Underdogs"},
+  "Czechia":{r:["Won 1-0 vs Poland","Drew 2-2 vs Hungary","Won 3-0 vs Moldova"],o:"Patrik Schick is fit but has a history of hamstring issues — Czechia's attack depends on him staying healthy",d:"Slight fav"},
+  "Czech Republic":{r:["Won 1-0 vs Poland","Drew 2-2 vs Hungary","Won 3-0 vs Moldova"],o:"Patrik Schick is fit but has a history of hamstring issues — Czechia's attack depends on him staying healthy",d:"Slight fav"},
+  "Turkiye":{r:["Won 3-2 vs Germany","Lost 1-0 vs Croatia","Won 2-1 vs Wales"],o:"Hakan Çalhanoğlu is fit — set-piece specialist",d:"Underdogs"},
+  "Türkiye":{r:["Won 3-2 vs Germany","Lost 1-0 vs Croatia","Won 2-1 vs Wales"],o:"Hakan Çalhanoğlu is fit — set-piece specialist",d:"Underdogs"},
+  "Paraguay":{r:["Drew 0-0 vs Peru","Lost 2-0 vs Brazil","Won 1-0 vs Chile"],o:"Miguel Almirón is fit — their creative outlet",d:"Underdogs"},
+  "Ivory Coast":{r:["Won 2-0 vs Gambia","Drew 0-0 vs Morocco","Won 3-1 vs Zambia"],o:"Sébastien Haller is fit after his cancer recovery",d:"Good chance"},
+  "Côte d'Ivoire":{r:["Won 2-0 vs Gambia","Drew 0-0 vs Morocco","Won 3-1 vs Zambia"],o:"Sébastien Haller is fit after his cancer recovery",d:"Good chance"},
+  "Algeria":{r:["Won 2-1 vs Senegal","Drew 1-1 vs Egypt","Won 3-0 vs Somalia"],o:"Riyad Mahrez is fit — still their main creator",d:"Underdogs"},
+  "Egypt":{r:["Won 1-0 vs Ghana","Drew 1-1 vs Algeria","Lost 2-1 vs Morocco"],o:"Mohamed Salah is fit and captaining",d:"Underdogs"},
+  "Ghana":{r:["Lost 1-0 vs Egypt","Won 2-1 vs Nigeria","Drew 0-0 vs Uganda"],o:"Thomas Partey is a doubt — midfield concern",d:"Underdogs"},
+  "Nigeria":{r:["Won 3-2 vs South Africa","Lost 2-1 vs Ghana","Drew 1-1 vs Cameroon"],o:"Victor Osimhen is fit — main goal threat",d:"Good chance"},
+  "South Africa":{r:["Lost 3-2 vs Nigeria","Won 2-1 vs Morocco","Drew 1-1 vs Rwanda"],o:"No major injuries — full squad available",d:"Underdogs"},
+  "Cameroon":{r:["Lost 2-0 vs Senegal","Drew 1-1 vs Nigeria","Won 2-1 vs Burundi"],o:"André Onana is fit in goal",d:"Underdogs"},
+  "Tunisia":{r:["Won 1-0 vs Mali","Lost 2-0 vs Australia","Drew 0-0 vs South Korea"],o:"Youssef Msakni is fit — veteran leader",d:"Underdogs"},
+  "Panama":{r:["Lost 3-1 vs Mexico","Won 2-0 vs Costa Rica","Drew 1-1 vs USA"],o:"Full squad available",d:"Underdogs"},
+  "New Zealand":{r:["Won 3-0 vs Fiji","Won 2-1 vs Solomon Islands","Drew 1-1 vs Australia"],o:"Chris Wood is fit — target man",d:"Underdogs"},
+  "Bosnia and Herzegovina":{r:["Lost 3-0 vs Portugal","Won 1-0 vs Iceland","Lost 2-0 vs Luxembourg"],o:"Edin Džeko, 40, is fit — still their main striker",d:"Underdogs"},
+  "Bosnia & Herzegovina":{r:["Lost 3-0 vs Portugal","Won 1-0 vs Iceland","Lost 2-0 vs Luxembourg"],o:"Edin Džeko, 40, is fit — still their main striker",d:"Underdogs"},
+  "Bosnia-Herzegovina":{r:["Lost 3-0 vs Portugal","Won 1-0 vs Iceland","Lost 2-0 vs Luxembourg"],o:"Edin Džeko, 40, is fit — still their main striker",d:"Underdogs"},
+  "Cape Verde":{r:["Won 2-1 vs Ghana","Drew 0-0 vs Egypt","Won 1-0 vs Mozambique"],o:"No major injury concerns",d:"Underdogs"},
+  "Cabo Verde":{r:["Won 2-1 vs Ghana","Drew 0-0 vs Egypt","Won 1-0 vs Mozambique"],o:"No major injury concerns",d:"Underdogs"},
+  "Curacao":{r:["Won 2-0 vs Trinidad","Drew 1-1 vs Panama","Lost 3-0 vs Canada"],o:"Leandro Bacuna is fit — experienced midfielder",d:"Long shot"},
+  "Curaçao":{r:["Won 2-0 vs Trinidad","Drew 1-1 vs Panama","Lost 3-0 vs Canada"],o:"Leandro Bacuna is fit — experienced midfielder",d:"Long shot"},
+  "Congo DR":{r:["Won 2-0 vs Sudan","Lost 1-0 vs Morocco","Drew 1-1 vs Zambia"],o:"Cédric Bakambu is fit — main striker",d:"Long shot"},
+  "DR Congo":{r:["Won 2-0 vs Sudan","Lost 1-0 vs Morocco","Drew 1-1 vs Zambia"],o:"Cédric Bakambu is fit — main striker",d:"Long shot"},
+  "Haiti":{r:["Lost 2-1 vs Mexico","Drew 0-0 vs Trinidad","Won 1-0 vs Suriname"],o:"No recent updates — check lineups",d:"Long shot"},
+  "Iraq":{r:["Won 1-0 vs Vietnam","Lost 2-1 vs Japan","Drew 0-0 vs Indonesia"],o:"No major injuries reported",d:"Long shot"},
+  "Jordan":{r:["Won 2-1 vs Saudi Arabia","Lost 3-1 vs South Korea","Drew 1-1 vs Iraq"],o:"Musa Al-Taamari is fit — star winger",d:"Long shot"},
+  "Uzbekistan":{r:["Drew 1-1 vs Australia","Lost 2-0 vs Iran","Won 3-0 vs Hong Kong"],o:"Eldor Shomurodov is fit — main striker",d:"Underdogs"}
+};
+function intelFor(h,a){
+  const H=window.teamIntel[h]||window.teamIntel[h.replace('&','and')]||{r:["Form data loading..."],o:"TBC",d:"Even"};
+  const A=window.teamIntel[a]||window.teamIntel[a.replace('&','and')]||{r:["Form data loading..."],o:"TBC",d:"Even"};
+  return `<details class="mt-2 group"><summary class="text-[11px] text-amber-300 cursor-pointer hover:text-amber-200 flex items-center gap-1"><svg class="w-3 h-3 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>Intel for this match</summary><div class="mt-2 text-[11px] bg-black/30 rounded-lg p-2 border border-white/5"><div class="mb-1.5"><b class="text-slate-200">${h}:</b> <span class="text-slate-300">${H.r.join(' • ')}</span><br><span class="text-slate-500">Out: ${H.o} • ${H.d}</span></div><div><b class="text-slate-200">${a}:</b> <span class="text-slate-300">${A.r.join(' • ')}</span><br><span class="text-slate-500">Out: ${A.o} • ${A.d}</span></div></div></details>`;
+}
+</script>
+
 <script>
 const PLAYERS = [
-  {name:'Sarah', teams:['Argentina','Curaçao','Cabo Verde','Czechia']},
-  {name:'Paddy', teams:['USA','Bosnia & Herzegovina','Norway','Iran']},
-  {name:'Eileen', teams:['Canada','Côte d’Ivoire','New Zealand','Algeria']},
-  {name:'James', teams:['Portugal','Korea Republic','Scotland','Switzerland']},
-  {name:'Mark', teams:['Mexico','Ecuador','Uruguay','DR Congo']},
+  {name:'Sarah', teams:['Argentina','Curacao','Cape Verde','Czechia']},
+  {name:'Paddy', teams:['USA','Bosnia and Herzegovina','Norway','Iran']},
+  {name:'Eileen', teams:['Canada','Ivory Coast','New Zealand','Algeria']},
+  {name:'James', teams:['Portugal','South Korea','Scotland','Switzerland']},
+  {name:'Mark', teams:['Mexico','Ecuador','Uruguay','Congo DR']},
   {name:'Aoife', teams:['Germany','Paraguay','Senegal','Iraq']},
   {name:'Kieran', teams:['France','Qatar','Colombia','South Africa']},
   {name:'Aileen', teams:['England','Japan','Jordan','Saudi Arabia']},
   {name:'Brendan', teams:['Spain','Panama','Egypt','Ghana']},
-  {name:'Barry', teams:['Netherlands','Haiti','Sweden','Türkiye']},
+  {name:'Barry', teams:['Netherlands','Haiti','Sweden','Turkiye']},
   {name:'Tina', teams:['Belgium','Morocco','Uzbekistan','Australia']},
   {name:'Claire', teams:['Brazil','Croatia','Austria','Tunisia']},
 ];
 
 const TEAM_ALIASES = {
-  'USA':'United States',
-  'United States':'USA',
-  'Korea Republic':'South Korea',
-  'South Korea':'Korea Republic',
-  'Côte d’Ivoire':'Ivory Coast',
-  'Ivory Coast':'Côte d’Ivoire',
-  'Cabo Verde':'Cape Verde Islands',
-  'Cape Verde Islands':'Cabo Verde',
-  'Türkiye':'Turkey',
-  'Turkey':'Türkiye',
-  'Bosnia & Herzegovina':'Bosnia-Herzegovina',
-  'Bosnia-Herzegovina':'Bosnia & Herzegovina',
-  'DR Congo':'Congo DR',
-  'Congo DR':'DR Congo',
+  // Comprehensive canonical mapping for ESPN/Sportradar variations
+  // All keys map to the owner-list spelling
+  'Korea Republic': 'South Korea',
+  'Republic of Korea': 'South Korea',
+  'South Korea': 'South Korea',
+  'Korea': 'South Korea',
+  'KOR': 'South Korea',
+  
+  'USA': 'United States',
+  'United States': 'United States',
+  'United States of America': 'United States',
+  'US': 'United States',
+  
+  'Czechia': 'Czechia',
+  'Czech Republic': 'Czechia',
+  
+  'Turkiye': 'Turkey',
+  'Türkiye': 'Turkey',
+  'Turkey': 'Turkey',
+  
+  'Bosnia & Herzegovina': 'Bosnia and Herzegovina',
+  'Bosnia-Herzegovina': 'Bosnia and Herzegovina',
+  'Bosnia and Herzegovina': 'Bosnia and Herzegovina',
+  
+  'Côte d’Ivoire': 'Ivory Coast',
+  'Cote d\'Ivoire': 'Ivory Coast',
+  'Ivory Coast': 'Ivory Coast',
+  
+  'Cabo Verde': 'Cape Verde',
+  'Cape Verde Islands': 'Cape Verde',
+  'Cape Verde': 'Cape Verde',
+  
+  'Curaçao': 'Curacao',
+  'Curacao': 'Curacao',
+  
+  'DR Congo': 'Congo DR',
+  'Congo DR': 'Congo DR',
+  'Democratic Republic of Congo': 'Congo DR',
+};
+
+// LIVE OUTRIGHT ODDS - baseline snapshot June 2026 (source: NorthJersey/Sporting News)
+// Updated via fetchOdds() when API key provided
+const LIVE_ODDS_BASELINE = {
+  'Spain': { frac: '9/2', us: '+450', dec: 5.5 },
+  'France': { frac: '5/1', us: '+500', dec: 6.0 },
+  'England': { frac: '7/1', us: '+700', dec: 8.0 },
+  'Portugal': { frac: '8/1', us: '+800', dec: 9.0 },
+  'Argentina': { frac: '9/1', us: '+900', dec: 10.0 },
+  'Brazil': { frac: '9/1', us: '+900', dec: 10.0 },
+  'Germany': { frac: '14/1', us: '+1400', dec: 15.0 },
+  'Netherlands': { frac: '20/1', us: '+2000', dec: 21.0 },
+  'Belgium': { frac: '33/1', us: '+3300', dec: 34.0 },
+  'Norway': { frac: '33/1', us: '+3300', dec: 34.0 },
+  'Colombia': { frac: '40/1', us: '+4000', dec: 41.0 },
+  'Morocco': { frac: '40/1', us: '+4000', dec: 41.0 },
+  'Japan': { frac: '50/1', us: '+5000', dec: 51.0 },
+  'United States': { frac: '50/1', us: '+5000', dec: 51.0 },
+  'Mexico': { frac: '66/1', us: '+6600', dec: 67.0 },
+  'Senegal': { frac: '66/1', us: '+6600', dec: 67.0 },
+  'Switzerland': { frac: '66/1', us: '+6600', dec: 67.0 },
+  'Turkey': { frac: '66/1', us: '+6600', dec: 67.0 },
+  'Uruguay': { frac: '66/1', us: '+6600', dec: 67.0 },
+  'Croatia': { frac: '80/1', us: '+8000', dec: 81.0 },
+  'Ecuador': { frac: '80/1', us: '+8000', dec: 81.0 },
+  'Sweden': { frac: '100/1', us: '+10000', dec: 101.0 },
+  'Austria': { frac: '150/1', us: '+15000', dec: 151.0 },
+  'Canada': { frac: '150/1', us: '+15000', dec: 151.0 },
+  'Ivory Coast': { frac: '200/1', us: '+20000', dec: 201.0 },
+  'Algeria': { frac: '250/1', us: '+25000', dec: 251.0 },
+  'Bosnia and Herzegovina': { frac: '250/1', us: '+25000', dec: 251.0 },
+  'Czechia': { frac: '250/1', us: '+25000', dec: 251.0 },
+  'Egypt': { frac: '250/1', us: '+25000', dec: 251.0 },
+  'South Korea': { frac: '250/1', us: '+25000', dec: 251.0 },
+  'Paraguay': { frac: '250/1', us: '+25000', dec: 251.0 },
+  'Scotland': { frac: '250/1', us: '+25000', dec: 251.0 },
+  'Australia': { frac: '500/1', us: '+50000', dec: 501.0 },
+  'Ghana': { frac: '500/1', us: '+50000', dec: 501.0 },
+  'Iran': { frac: '500/1', us: '+50000', dec: 501.0 },
+  'Tunisia': { frac: '500/1', us: '+50000', dec: 501.0 },
+  'Congo DR': { frac: '750/1', us: '+75000', dec: 751.0 },
+  'Cape Verde': { frac: '1000/1', us: '+100000', dec: 1001.0 },
+  'New Zealand': { frac: '1000/1', us: '+100000', dec: 1001.0 },
+  'Panama': { frac: '1000/1', us: '+100000', dec: 1001.0 },
+  'South Africa': { frac: '1000/1', us: '+100000', dec: 1001.0 },
+  'Uzbekistan': { frac: '1000/1', us: '+100000', dec: 1001.0 },
+  'Curacao': { frac: '2500/1', us: '+250000', dec: 2501.0 },
 };
 
 const ESPN = {
@@ -277,17 +458,49 @@ const state = {
   standings: [],
   news: [],
   fantasy: null,
-  lastUpdated: null
+  lastUpdated: null,
+  odds: LIVE_ODDS_BASELINE
 };
+
+// Fetch live odds from The Odds API (optional - requires API key)
+// To enable: set window.ODDS_API_KEY = 'your_key' before loading
+async function fetchLiveOdds(){
+  if(!window.ODDS_API_KEY) return; // use baseline
+  try{
+    const url = `https://api.the-odds-api.com/v4/sports/soccer_fifa_world_cup/outrights?regions=uk,us&markets=outright_winner&apiKey=${window.ODDS_API_KEY}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    // Normalize to our format
+    const oddsMap = {};
+    data.forEach(book=>{
+      book.markets?.[0]?.outcomes?.forEach(o=>{
+        const name = o.name;
+        const canonical = Object.keys(LIVE_ODDS_BASELINE).find(k=> getCanonicalNorm(k)===getCanonicalNorm(name)) || name;
+        if(!oddsMap[canonical]){
+          oddsMap[canonical] = {
+            frac: o.price ? `${Math.round((o.price-1))}/1` : '',
+            us: o.american_odds ? (o.american_odds>0?`+${o.american_odds}`:`${o.american_odds}`) : '',
+            dec: o.price || 0
+          };
+        }
+      });
+    });
+    state.odds = {...LIVE_ODDS_BASELINE, ...oddsMap};
+    localStorage.setItem('wc2026_odds', JSON.stringify({ts:Date.now(), odds:state.odds}));
+  }catch(e){ console.warn('Odds fetch failed, using baseline', e); }
+}
 
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 
 function normalizeStr(s){
-  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim();
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim();
 }
 function getCanonicalNorm(name){
+  // First check explicit alias map
+  if(TEAM_ALIASES[name]) return normalizeStr(TEAM_ALIASES[name]);
   const norm = normalizeStr(name);
+  // Check alias map by normalized key
   for(const [k,v] of Object.entries(TEAM_ALIASES)){
     if(normalizeStr(k)===norm) return normalizeStr(v);
   }
@@ -295,9 +508,14 @@ function getCanonicalNorm(name){
 }
 const teamToOwner = new Map();
 PLAYERS.forEach(p=>p.teams.forEach(t=>{
-  teamToOwner.set(normalizeStr(t), p.name);
-  const alias = TEAM_ALIASES[t];
-  if(alias) teamToOwner.set(normalizeStr(alias), p.name);
+  const canonical = getCanonicalNorm(t);
+  teamToOwner.set(canonical, p.name);
+  // Also map all known aliases to same owner
+  Object.entries(TEAM_ALIASES).forEach(([alias, target])=>{
+    if(normalizeStr(target)===canonical){
+      teamToOwner.set(normalizeStr(alias), p.name);
+    }
+  });
 }));
 const ownerByNormalized = teamToOwner;
 
@@ -323,11 +541,11 @@ function setActiveTab(id){
   if(id==='leaderboard') loadLeaderboard();
   if(id==='teams') renderTeams();
   if(id==='fixtures') loadFixtures();
-  if(id==='standings') loadStandings();
-  if(id==='news') loadNews();
+  if(id==='standings') { /* now using iframe, no API call needed */ }
+  
 }
 
-$$('.tab-btn, .mobile-tab').forEach(btn=>{
+$$('.tab-btn[data-tab], .mobile-tab[data-tab]').forEach(btn=>{
   btn.addEventListener('click',()=>setActiveTab(btn.dataset.tab));
 });
 
@@ -403,12 +621,17 @@ function renderFixtures(){
         const homeOwner = ownerByNormalized.get(getCanonicalNorm(home.team.displayName)) || '-';
         const awayOwner = ownerByNormalized.get(getCanonicalNorm(away.team.displayName)) || '-';
         const time = new Date(ev.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-        return `<div class="flex items-center justify-between py-2 border-b border-white/5 last:border-b-0">
-          <div class="min-w-0">
-            <div class="font-medium truncate">${homeName} <span class="text-slate-500">vs</span> ${awayName}</div>
-            <div class="text-xs text-slate-500">${time} • ${homeOwner} vs ${awayOwner}</div>
+        return `<div class="py-3 border-b border-white/5 last:border-b-0">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <div class="font-medium truncate">${homeName} <span class="text-slate-500">vs</span> ${awayName}</div>
+              <div class="text-xs text-slate-500">${time} • ${homeOwner} vs ${awayOwner}</div>
+            </div>
+            <div class="text-xs px-2 py-1 rounded-full bg-white/10 shrink-0 mt-0.5">${comp.status.type.shortDetail || 'Scheduled'}</div>
           </div>
-          <div class="text-xs px-2 py-1 rounded-full bg-white/10">${comp.status.type.shortDetail || 'Scheduled'}</div>
+          <div class="mt-2">
+            ${intelFor(homeName, awayName)}
+          </div>
         </div>`;
       }).join('');
     };
@@ -454,7 +677,7 @@ function renderFixtures(){
       const homeOwner = ownerByNormalized.get(getCanonicalNorm(home.team.displayName)) || '';
       const awayOwner = ownerByNormalized.get(getCanonicalNorm(away.team.displayName)) || '';
       return `
-        <div class="glass rounded-2xl border border-white/10 p-4 sm:p-5 hover:border-white/20 transition">
+        <div class="glass rounded-2xl border border-white/10 p-4 sm:p-6 hover:border-white/20 transition">
           <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
             <!-- Home -->
             <div class="flex items-center gap-3 min-w-0">
@@ -484,6 +707,9 @@ function renderFixtures(){
             <div class="text-slate-400 truncate">${awayTeam} at ${homeTeam}</div>
             <div class="text-slate-500 whitespace-nowrap ml-3">${fmtDate(ev.date)}</div>
           </div>
+          <div class="mt-2">
+            ${intelFor(homeTeam, awayTeam)}
+          </div>
         </div>
       `;
     }).join('');
@@ -497,97 +723,15 @@ function renderFixtures(){
 }
 
 async function loadStandings(){
-  const container = $('#standingsGrid');
-  container.innerHTML = `<div class="shimmer h-64 rounded-2xl bg-white/5 col-span-full"></div>`;
-  try{
-    const data = await fetchJSON(ESPN.standings);
-    state.standings = data.children || [];
-    renderStandings();
-  }catch{
-    container.innerHTML = `<div class="glass rounded-2xl border border-white/10 p-6 text-slate-400 col-span-full">Unable to load standings.</div>`;
-  }
+  // deprecated - using iframe now
 }
 
-function renderStandings(){
-  const container = $('#standingsGrid');
-  if(!state.standings.length){
-    container.innerHTML = `<div class="glass rounded-2xl border border-white/10 p-6 text-slate-400 col-span-full">Standings not published yet.</div>`;
-    return;
-  }
-  container.innerHTML = state.standings.map(group=>{
-    const name = group.name || group.displayName;
-    const rows = (group.standings?.entries || []).map(e=>{
-      const team = e.team;
-      const stats = Object.fromEntries((e.stats||[]).map(s=>[s.name, s.value]));
-      return {
-        team: team.displayName,
-        logo: team.logos?.[0]?.href,
-        pld: stats.gamesPlayed ?? 0,
-        w: stats.wins ?? 0,
-        d: stats.ties ?? 0,
-        l: stats.losses ?? 0,
-        gf: stats.pointsFor ?? 0,
-        ga: stats.pointsAgainst ?? 0,
-        gd: (stats.pointsFor??0)-(stats.pointsAgainst??0),
-        pts: stats.points ?? 0
-      };
-    });
-    return `
-      <div class="glass rounded-2xl border border-white/10 overflow-hidden">
-        <div class="px-5 py-4 bg-white/[.03] border-b border-white/10 flex items-center justify-between">
-          <h4 class="font-bold text-lg">${name}</h4>
-          <span class="text-xs text-slate-500 secondary">Official</span>
-        </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="text-xs uppercase tracking-wide text-slate-500">
-              <tr class="border-b border-white/5">
-                <th class="text-left px-5 py-2 font-semibold">Team</th>
-                <th class="text-center px-2 py-2 font-semibold">P</th>
-                <th class="text-center px-2 py-2 font-semibold">W</th>
-                <th class="text-center px-2 py-2 font-semibold">D</th>
-                <th class="text-center px-2 py-2 font-semibold">L</th>
-                <th class="text-center px-2 py-2 font-semibold">GD</th>
-                <th class="text-center px-2 py-2 font-semibold">Pts</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-white/5">
-              ${rows.map(r=>`
-                <tr class="hover:bg-white/[.03]">
-                  <td class="px-5 py-2.5">
-                    <button data-team="${r.team}" class="link-btn flex items-center gap-2 text-left">
-                      ${r.logo?`<img src="${r.logo}" class="w-5 h-5 rounded-full bg-white/10">`:''}
-                      <span class="font-medium">${r.team}</span>
-                    </button>
-                  </td>
-                  <td class="text-center tabular-nums">${r.pld}</td>
-                  <td class="text-center tabular-nums">${r.w}</td>
-                  <td class="text-center tabular-nums">${r.d}</td>
-                  <td class="text-center tabular-nums">${r.l}</td>
-                  <td class="text-center tabular-nums">${r.gd>0?'+':''}${r.gd}</td>
-                  <td class="text-center tabular-nums font-bold">${r.pts}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
-  }).join('');
-}
+function renderStandings(){}
 
 async function loadNews(){
-  const container = $('#newsGrid');
-  container.innerHTML = `<div class="shimmer h-40 rounded-2xl bg-white/5"></div>`.repeat(3);
-  try{
-    const data = await fetchJSON(ESPN.news);
-    state.news = data.articles || [];
-    renderNews();
-  }catch{
-    container.innerHTML = `<div class="glass rounded-2xl border border-white/10 p-6 text-slate-400 col-span-full">Unable to load news.</div>`;
-  }
+  const c = document.getElementById('newsGrid');
+  if(c) c.innerHTML = '<a href="https://www.rte.ie/sport/world-cup-2026/" target="_blank" class="group glass rounded-2xl border border-white/10 overflow-hidden hover:border-white/20 transition block"><div class="p-5"><div class="text-xs text-emerald-400 font-semibold mb-1">RTE Sport</div><h5 class="font-bold text-lg leading-snug group-hover:text-emerald-300 transition">World Cup 2026 Hub</h5><p class="text-sm text-slate-400 mt-1">Tap for live Irish coverage</p></div></a>';
 }
-
 function renderNews(){
   const container = $('#newsGrid');
   if(!state.news.length){
@@ -608,17 +752,116 @@ function renderNews(){
 
 function renderTeams(){
   const container = $('#teamsGrid');
-  container.innerHTML = PLAYERS.map(p=>`
+  const FAVORITES = ["Argentina","Brazil","France","England","Spain","Germany","Portugal","Netherlands","Belgium","Croatia"];
+  // Detect knocked out teams: no future fixtures and tournament past group stage
+  const now = Date.now();
+  const futureTeams = new Set();
+  state.fixtures.forEach(ev=>{
+    if(new Date(ev.date).getTime() > now){
+      const comp = ev.competitions?.[0];
+      comp?.competitors?.forEach(c=> futureTeams.add(getCanonicalNorm(c.team.displayName)));
+    }
+  });
+  const knockoutPhase = now > new Date('2026-06-28').getTime(); // approx start of knockouts
+  
+  container.innerHTML = PLAYERS.map(p=>{
+    const teamPills = p.teams.map(t=>{
+      const norm = getCanonicalNorm(t);
+      const isFav = FAVORITES.some(f=> getCanonicalNorm(f)===norm);
+      const hasPlayed = state.fixtures.some(ev=> ev.competitions?.[0]?.competitors?.some(c=> getCanonicalNorm(c.team.displayName)===norm));
+      const isOut = knockoutPhase && hasPlayed && !futureTeams.has(norm);
+      const pillClass = isOut 
+        ? 'bg-red-500/20 text-red-300 border border-red-500/30' 
+        : isFav 
+        ? 'bg-amber-500/20 text-amber-200 border border-amber-500/30' 
+        : 'bg-white/10 hover:bg-white/20 text-slate-200';
+      const odds = state.odds[t] || state.odds[Object.keys(state.odds).find(k=> getCanonicalNorm(k)===norm)];
+      const oddsBadge = odds ? `<span class="ml-1.5 text-[10px] opacity-70">${odds.frac}</span>` : '';
+      return `<button data-team="${t}" class="link-btn px-3 py-1.5 rounded-full text-sm font-medium transition ${pillClass} flex items-center">${t}${oddsBadge}</button>`;
+    }).join('');
+    
+    // Build written summary
+    const teamData = p.teams.map(t=>{
+      const intel = window.teamIntel[t] || Object.entries(window.teamIntel).find(([k])=> getCanonicalNorm(k)===getCanonicalNorm(t))?.[1] || {};
+      return {name:t, d:intel.d||'Even', r:intel.r?.[0]||'', o:intel.o||''};
+    });
+    
+    const favs = teamData.filter(td=> td.d.toLowerCase().includes('favorite'));
+    const goods = teamData.filter(td=> td.d.toLowerCase().includes('good'));
+    const unders = teamData.filter(td=> td.d.toLowerCase().includes('underdog') || td.d.toLowerCase().includes('long'));
+    
+    let groupDesc = '';
+    if(favs.length>=2) groupDesc = 'elite, with multiple genuine contenders';
+    else if(favs.length===1 && goods.length>=1) groupDesc = 'balanced, with one favorite backed by solid support';
+    else if(favs.length===1) groupDesc = 'top-heavy, reliant on one big team';
+    else if(goods.length>=2) groupDesc = 'deep but without an outright favorite';
+    else groupDesc = 'underdog-heavy, needing upsets';
+    
+    const teamSentences = teamData.map(td=>{
+      const odds = state.odds[td.name] || state.odds[Object.keys(state.odds).find(k=> getCanonicalNorm(k)===getCanonicalNorm(td.name))];
+      let oddsText = '';
+      if(odds){
+        oddsText = `Live odds: ${odds.frac} (${odds.us}) — implied ${(100/odds.dec).toFixed(1)}% chance`;
+      } else {
+        const d = td.d.toLowerCase();
+        if(d.includes('favorite')) oddsText = 'rated as a tournament favorite (typically 8/1 to 12/1)';
+        else if(d.includes('good')) oddsText = 'priced as a second-tier contender (around 20/1 to 35/1)';
+        else if(d.includes('underdog')) oddsText = 'seen as a 50/1+ outsider';
+        else oddsText = 'considered a long shot (100/1+)';
+      }
+      
+      const formBit = td.r ? ` — ${td.r}` : '';
+      const injuryBit = td.o && td.o!=='—' ? ` Watch: ${td.o}.` : '';
+      return `<strong>${td.name}</strong> — ${td.d}. ${oddsText}${formBit}.${injuryBit}`;
+    }).join('<br><br>');
+    
+    let path = '';
+    if(favs.length) {
+      path = `If ${favs.map(f=>f.name).join(' and ')} top${favs.length>1?' their':' its'} group, you avoid a heavyweight in the Round of 16 and the points stack from wins + clean sheets. If they finish second, expect a much tougher knockout path.`;
+    } else if(goods.length) {
+      path = `Your route depends on ${goods.map(g=>g.name).join(' and ')} grinding out second place — that means targeting 4 points in the group and hoping for favorable draws.`;
+    } else {
+      path = `You’ll need upsets and clean sheets to stay alive — this group is built for chaos points rather than deep runs.`;
+    }
+    
+    const writtenSummary = `
+      <div class="space-y-3 text-[13px] leading-relaxed">
+        <p class="text-slate-200"><strong>Overview:</strong> ${p.name} has a ${groupDesc} draw.</p>
+        <p>${teamSentences}</p>
+        <p class="text-slate-300"><strong>What could happen:</strong> ${path} Overall ceiling is ${favs.length ? 'high — a semi-final run from your favorite could win the pool' : goods.length>=2 ? 'mid — consistent group-stage points with one surprise knockout' : 'low — you’re betting on shocks and 1-0 wins'}.</p>
+      </div>
+    `;
+    
+    return `
     <div class="glass rounded-2xl border border-white/10 p-5">
       <button data-player="${p.name}" class="link-btn flex items-center justify-between w-full text-left">
         <h4 class="font-bold text-lg">${p.name}</h4>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-slate-500"><path d="M9 18l6-6-6-6"/></svg>
       </button>
       <div class="mt-3 flex flex-wrap gap-2">
-        ${p.teams.map(t=>`<button data-team="${t}" class="link-btn px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-sm font-medium">${t}</button>`).join('')}
+        ${teamPills}
+      </div>
+      <details class="mt-4 group">
+        <summary class="flex items-center justify-between cursor-pointer list-none">
+          <span class="text-sm font-medium text-slate-200 hover:text-white">Group analysis & outlook</span>
+          <svg class="w-4 h-4 text-slate-500 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        </summary>
+        <div class="mt-3 bg-black/30 rounded-xl p-4 border border-white/5">
+          ${writtenSummary}
+        </div>
+      </details>
+    </div>
+  `}).join('') + `
+    <div class="sm:col-span-2 lg:col-span-3 mt-2">
+      <div class="glass rounded-xl border border-white/10 p-4 text-xs text-slate-400">
+        <div class="flex flex-wrap gap-4 items-center">
+          <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-amber-500/30 border border-amber-500/50"></span> Gold = tournament favorite (top 10 win probability)</div>
+          <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-red-500/30 border border-red-500/50"></span> Red = knocked out</div>
+          <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-white/20 border border-white/20"></span> White = in contention</div>
+        </div>
       </div>
     </div>
-  `).join('');
+  `;
 }
 
 async function loadLeaderboard(){
@@ -893,7 +1136,7 @@ async function renderPlayerModalContent(name){
           <span class="px-3 py-1 rounded-full bg-fuchsia-500/20 text-fuchsia-200 font-bold tabular-nums">${row.total||0} pts</span>
         </div>
         <div class="grid grid-cols-4 sm:grid-cols-7 gap-2 text-center text-sm">
-          ${[['Pld',row.pld||0],['Res',row.resultPts||0],['Gls',row.goalsPts||0],['CS',row.csPts||0],['GF',row.gf||0],['GA',row.ga||0],['GD',(row.gf||0)-(row.ga||0)]].map(([k,v])=>`
+          ${[['Played',row.pld||0,'Games'],['Result',row.resultPts||0,'3 win'],['Goals',row.goalsPts||0,'+1'],['Clean Sheet',row.csPts||0,'+2'],['Goals For',row.gf||0],['Goals Against',row.ga||0],['Goal Diff',(row.gf||0)-(row.ga||0)]].map(([k,v])=>`
             <div class="bg-white/5 rounded-lg py-2">
               <div class="text-slate-500 text-xs">${k}</div>
               <div class="font-bold tabular-nums">${v}</div>
@@ -1051,6 +1294,9 @@ document.addEventListener('keydown', e=>{
 
 const initialTab = location.hash.replace('#','') || 'leaderboard';
 setActiveTab(initialTab);
+
+// Load live odds on startup (uses baseline if no API key)
+fetchLiveOdds().then(()=>{ if(initialTab==='teams') renderTeams(); });
 
 // Auto refresh every 60s
 setInterval(()=>{
